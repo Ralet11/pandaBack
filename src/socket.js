@@ -1,0 +1,39 @@
+import { Server as SocketIO } from "socket.io";
+
+
+let io;
+
+const initializeSocket = (server) => {
+  io = new SocketIO(server, {
+    cors: {
+      origin: `${ process.env.FRONTEND_URL}`, 
+      methods: ["GET", "POST"]
+    }
+  });
+
+  io.on("connection", (socket) => {
+    console.log(`Cliente WebSocket conectado: ${socket.id}`);
+    
+   
+    socket.on("joinRoom", (userId) => {
+      socket.join(userId);
+      console.log(`Socket ${socket.id} se unió al room ${userId}`);
+      console.log("Rooms actuales del socket:", socket.rooms);
+    });
+    
+    socket.on("disconnect", () => {
+      console.log(`Cliente WebSocket desconectado: ${socket.id}`);
+    });
+  });
+
+  return io;
+};
+
+const getIo = () => {
+  if (!io) {
+    throw new Error("Socket.io not initialized!");
+  }
+  return io;
+};
+
+export { initializeSocket, getIo };
