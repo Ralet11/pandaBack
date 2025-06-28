@@ -1,5 +1,3 @@
-// src/controllers/order.controller.js
-
 import Order     from "../models/order.model.js";
 import OrderItem from "../models/orderItem.model.js";
 import Product   from "../models/product.model.js";
@@ -7,27 +5,25 @@ import Shop      from "../models/shop.model.js";
 import User      from "../models/user.model.js";
 import Owner     from "../models/owner.model.js";
 import Address   from "../models/address.model.js";
-
+import { getIo } from "../socket.js";
+import axios     from "axios";     
 /* ---- Utility to generate 4-char codes ---- */
 const genCode = () => Math.random().toString(36).slice(-4).toUpperCase();
 
-/* ---- Create a new order ---- */
+/* ──────────────────────────────────────────────────────────── */
+/*                       CREATE  ORDER                         */
+/* ──────────────────────────────────────────────────────────── */
 export const createOrder = async (req, res) => {
   const { items, shop_id, ...orderData } = req.body;
-  if (!shop_id) {
-    return res.status(400).json({ message: "shop_id required" });
-  }
+  if (!shop_id) return res.status(400).json({ message: "shop_id required" });
 
   try {
-    // 1. Assign shop and generate codes
     orderData.shop_id      = shop_id;
     orderData.pickupCode   = genCode();
     orderData.deliveryCode = genCode();
 
-    // 2. Create the order
     const order = await Order.create(orderData);
 
-    // 3. Create each OrderItem
     for (const it of items) {
       const product = await Product.findByPk(it.product_id);
       await OrderItem.create({
@@ -38,52 +34,33 @@ export const createOrder = async (req, res) => {
       });
     }
 
-    // 4. Load shop details
     const shop = await Shop.findByPk(shop_id, {
       attributes: ["id", "name", "description", "latitude", "longitude", "logo"],
     });
 
-    // 5. Return the new order plus shop info
     const orderJSON = order.toJSON();
     orderJSON.shop = shop;
-    res.status(201).json(orderJSON);
 
+    res.status(201).json(orderJSON);
   } catch (err) {
     console.error("createOrder:", err);
     res.status(400).json({ message: "Error creating order." });
   }
 };
 
-/* ---- List all orders for the authenticated user ---- */
+/* ──────────────────────────────────────────────────────────── */
+/*                ORDERS OF LOGGED-IN USER                     */
+/* ──────────────────────────────────────────────────────────── */
 export const getOrders = async (req, res) => {
   try {
-    const userId = req.userId;
     const orders = await Order.findAll({
-      where: { user_id: userId },
+      where: { user_id: req.userId },
       order: [["createdAt", "DESC"]],
       include: [
-        {
-          model: Shop,
-          as: "shop",
-          attributes: ["id", "name", "logo", "description"],
-        },
-        {
-          model: OrderItem,
-          as: "order_items",
-          attributes: ["id", "quantity", "unitPrice"],
-          include: [
-            {
-              model: Product,
-              as: "product",
-              attributes: ["id", "name", "price", "img"],
-            },
-          ],
-        },
-        {
-          model: Address,
-          as: "address",
-          attributes: ["id", "street", "number", "apartment", "city", "state", "zip"],
-        },
+        { model: Shop,      as: "shop",        attributes: ["id", "name", "logo", "description"] },
+        { model: OrderItem, as: "order_items", attributes: ["id", "quantity", "unitPrice"],
+          include: [{ model: Product, as: "product", attributes: ["id", "name", "price", "img"] }] },
+        { model: Address,   as: "address" },
       ],
     });
     res.json(orders);
@@ -93,46 +70,54 @@ export const getOrders = async (req, res) => {
   }
 };
 
-/* ---- Retrieve a single order by ID ---- */
+/* ──────────────────────────────────────────────────────────── */
+/*             ORDERS OF ONE SHOP  (OWNER PANEL)               */
+/* ──────────────────────────────────────────────────────────── */
+export const getOrdersOwner = async (req, res) => {
+  try {
+    const shopId = Number(req.params.shopId);
+    if (!shopId) return res.status(400).json({ message: "shopId param required." });
+
+    const shop = await Shop.findByPk(shopId, {
+      attributes: ["id", "name", "logo", "description"],
+    });
+    if (!shop) return res.status(404).json({ message: "Shop not found." });
+
+    const orders = await Order.findAll({
+      where: { shop_id: shopId },
+      order: [["createdAt", "DESC"]],
+      include: [
+        { model: Shop,      as: "shop",        attributes: ["id", "name", "logo", "description"] },
+        { model: OrderItem, as: "order_items", attributes: ["id", "quantity", "unitPrice"],
+          include: [{ model: Product, as: "product", attributes: ["id", "name", "price", "img"] }] },
+        { model: Address,   as: "address" },
+        { model: User,      attributes: ["id", "name", "email"] },
+      ],
+    });
+
+    res.json(orders);
+  } catch (err) {
+    console.error("[ORDERS] getOrdersOwner:", err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+/* ──────────────────────────────────────────────────────────── */
+/*                       ORDER  BY  ID                         */
+/* ──────────────────────────────────────────────────────────── */
 export const getOrderById = async (req, res) => {
   try {
     const order = await Order.findByPk(req.params.id, {
       include: [
-        {
-          model: Shop,
-          as: "shop",
-          attributes: ["id", "name", "logo", "description"],
-        },
-        {
-          model: OrderItem,
-          as: "order_items",
-          attributes: ["id", "quantity", "unitPrice"],
-          include: [
-            {
-              model: Product,
-              as: "product",
-              attributes: ["id", "name", "price", "img"],
-            },
-          ],
-        },
-        {
-          model: Address,
-          as: "address"
-        },
-        {
-          model: User,
-          attributes: ["id", "name", "email"],
-        },
-        {
-          model: Owner,
-          attributes: ["id", "name"],
-        },
+        { model: Shop,      as: "shop",        attributes: ["id", "name", "logo", "description"] },
+        { model: OrderItem, as: "order_items", attributes: ["id", "quantity", "unitPrice"],
+          include: [{ model: Product, as: "product", attributes: ["id", "name", "price", "img"] }] },
+        { model: Address,   as: "address" },
+        { model: User,      attributes: ["id", "name", "email"] },
       ],
     });
 
-    if (!order) {
-      return res.status(404).json({ message: "Order not found." });
-    }
+    if (!order) return res.status(404).json({ message: "Order not found." });
 
     res.json(order);
   } catch (err) {
@@ -141,33 +126,132 @@ export const getOrderById = async (req, res) => {
   }
 };
 
-/* ---- Update the status of an order ---- */
+/* ──────────────────────────────────────────────────────────── */
+/*                   UPDATE  ORDER  STATUS                     */
+/* ──────────────────────────────────────────────────────────── */
 export const updateOrderStatus = async (req, res) => {
-  const { status } = req.body;
-  const order = await Order.findByPk(req.params.id);
-  if (!order) {
-    return res.status(404).json({ message: "Order not found." });
+  try {
+    const { status } = req.body;
+    const order = await Order.findByPk(req.params.id);
+    if (!order) return res.status(404).json({ message: "Order not found." });
+
+    await order.update({ status });
+
+    /* -------- Socket: notificar al usuario -------- */
+    const io = getIo();
+    io.to(String(order.user_id)).emit("order_state_changed", {
+      orderId: order.id,
+      status,
+    });
+
+    /* -------- Si pasa a "envio" → notificar al servicio de drivers -------- */
+    if (status === "aceptada" && order.deliveryPayload) {
+      console.log(order.deliveryPayload)
+      try {
+        console.log("enviando order")
+        await axios.post(
+          "https://cf38-143-105-137-227.ngrok-free.app/drivers/orders/new",
+          order.deliveryPayload,
+        );
+        console.log("[Order] deliveryPayload enviado al micro-servicio");
+      } catch (driverErr) {
+        // logueamos pero no rompemos el flujo principal
+        console.error("[Order] error enviando a drivers:", driverErr.message);
+      }
+    }
+
+    res.json(order);
+  } catch (err) {
+    console.error("[ORDERS] updateOrderStatus:", err);
+    res.status(500).json({ message: err.message });
   }
-  await order.update({ status });
-  res.json(order);
 };
 
-/* ---- Delete an order ---- */
+/* ──────────────────────────────────────────────────────────── */
+/*                    DELETE  &  FINISH                        */
+/* ──────────────────────────────────────────────────────────── */
 export const deleteOrder = async (req, res) => {
   const order = await Order.findByPk(req.params.id);
-  if (!order) {
-    return res.status(404).json({ message: "Order not found." });
-  }
+  if (!order) return res.status(404).json({ message: "Order not found." });
   await order.destroy();
   res.json({ message: "Order deleted." });
 };
 
-/* ---- Mark an order as finished ---- */
 export const finishOrder = async (req, res) => {
   const order = await Order.findByPk(req.body.id);
-  if (!order) {
-    return res.status(404).json({ message: "Order not found." });
-  }
+  if (!order) return res.status(404).json({ message: "Order not found." });
   await order.update({ status: "finalizada" });
   res.json(order);
+};
+
+export const sendingOrder = async (req, res) => {
+  const order = await Order.findByPk(req.body.id);
+  if (!order) return res.status(404).json({ message: "Order not found." });
+  await order.update({ status: "envio" });
+
+  const io = getIo();
+    io.to(String(order.user_id)).emit("order_state_changed", {
+      orderId: order.id,
+      status: "envio",
+    });
+
+  res.json(order);
+};
+
+export const driverLocation = async (req, res) => {
+  try {
+    const { orderId, lat, lng, name } = req.body;
+    console.log(req.body)
+
+    if (!orderId || lat == null || lng == null || !name) {
+      return res
+        .status(400)
+        .json({ message: "orderId, lat, lng y name son requeridos" });
+    }
+
+    /* 1. Buscar orden */
+    const order = await Order.findByPk(orderId);
+    if (!order) return res.status(404).json({ message: "Order not found." });
+
+    /* 2. Actualizar campos de entrega */
+    await order.update({
+      deliveryLat:  lat,
+      deliveryLng:  lng,
+      deliveryName: name,
+    });
+
+    /* 3. Notificar al usuario por WebSocket */
+    const io = getIo();
+    io.to(String(order.user_id)).emit("driver_assigned", {
+      orderId: order.id,
+      deliveryLat:  lat,
+      deliveryLng:  lng,
+      deliveryName: name,
+    });
+
+    res.json(order);
+  } catch (err) {
+    console.error("[ORDERS] driverLocation:", err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+export const updateDeliveryPayload = async (req, res) => {
+  console.log("aqui")
+  try {
+    const { deliveryPayload } = req.body;
+    console.log(req.body)
+    if (!deliveryPayload)
+      return res.status(400).json({ message: "deliveryPayload required." });
+
+    const order = await Order.findByPk(req.params.id);
+    if (!order) return res.status(404).json({ message: "Order not found." });
+
+    await order.update({ deliveryPayload });
+
+    res.json(order);
+  } catch (err) {
+    console.error("[ORDERS] updateDeliveryPayload:", err);
+    res.status(500).json({ message: err.message });
+  }
 };

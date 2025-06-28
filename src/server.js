@@ -8,6 +8,7 @@ import dotenv    from "dotenv";
 import http      from "http";
 import https     from "https";
 import fs        from "fs";
+import path      from "path";
 
 import { sequelize } from "./models/index.model.js";
 
@@ -39,11 +40,10 @@ const whitelist = [
 const corsOptions = {
   credentials: true,
   origin: (origin, cb) => {
-    // Permite React-Native (origin === undefined) + URLs whitelisted
     if (!origin || whitelist.some((url) => origin.startsWith(url))) {
       return cb(null, true);
     }
-    return cb(new Error("No permitido por CORS"));
+    return cb(new Error("Not allowed by CORS"));
   },
   methods: "GET,POST,PUT,PATCH,DELETE,OPTIONS",
   allowedHeaders: "Content-Type,Authorization",
@@ -66,18 +66,18 @@ app.use("/api/addresses",  addressRouter);
 /* ───────────── Error Handler global ───────────── */
 app.use((err, _req, res, _next) => {
   console.error("→ [GLOBAL ERROR HANDLER]", err);
-  res.status(500).json({ error: "Algo salió mal en el servidor." });
+  res.status(500).json({ error: "Internal server error." });
 });
 
 /* ───────────── Init DB & Server ───────────── */
 sequelize
   .sync({ alter: true })
   .then(() => {
-    console.log("📦 DB sincronizada");
+    console.log("📦 DB synced");
     startServer();
   })
   .catch((error) => {
-    console.error("❌ Error al sincronizar la DB:", error);
+    console.error("❌ DB sync error:", error);
   });
 
 function startServer() {
@@ -87,8 +87,10 @@ function startServer() {
   let server;
 
   if (isProduction) {
-    const privateKey  = fs.readFileSync("./certificados/private.key",  "utf8");
-    const certificate = fs.readFileSync("./certificados/certificate.crt", "utf8");
+    // certificados está en la raíz del proyecto (fuera de src)
+    const certBase = path.resolve(process.cwd(), "certificados");
+    const privateKey  = fs.readFileSync(path.join(certBase, "private.key"),  "utf8");
+    const certificate = fs.readFileSync(path.join(certBase, "certificate.crt"), "utf8");
     const credentials = { key: privateKey, cert: certificate };
     server = https.createServer(credentials, app);
   } else {
@@ -99,6 +101,6 @@ function startServer() {
   initializeSocket(server);
 
   server.listen(PORT, () =>
-    console.log(`🚀 Servidor ${isProduction ? "HTTPS" : "HTTP"} en ${PORT}`),
+    console.log(`🚀 ${isProduction ? "HTTPS" : "HTTP"} server listening on ${PORT}`),
   );
 }

@@ -1,5 +1,5 @@
-import { DataTypes } from "sequelize";
-import sequelize from "../dbconfig.js";
+import { DataTypes } from "sequelize"
+import sequelize from "../dbconfig.js"
 
 const Shop = sequelize.define(
   "shop",
@@ -7,50 +7,64 @@ const Shop = sequelize.define(
     id: {
       type: DataTypes.INTEGER,
       primaryKey: true,
-      autoIncrement: true
+      autoIncrement: true,
     },
+
+    /* ─────────────  Basic info  ───────────── */
     name: {
       type: DataTypes.STRING(120),
-      allowNull: false
+      allowNull: false,
     },
     description: {
       type: DataTypes.STRING(600),
-      allowNull: true
+      allowNull: true,
     },
+
+    /* ─────────────  Images  ───────────── */
     logo: {
       type: DataTypes.STRING(255),
-      allowNull: true
+      allowNull: true,
     },
     placeImage: {
       type: DataTypes.STRING(255),
-      allowNull: true
+      allowNull: true,
     },
     deliveryImage: {
       type: DataTypes.STRING(255),
-      allowNull: true
+      allowNull: true,
     },
-    // Nuevo atributo para dirección completa
+
+    /* ─────────────  Location  ───────────── */
     address: {
       type: DataTypes.STRING(255),
-      allowNull: true
+      allowNull: true,
     },
     latitude: {
       type: DataTypes.FLOAT,
-      allowNull: true
+      allowNull: true,
     },
     longitude: {
       type: DataTypes.FLOAT,
-      allowNull: true
+      allowNull: true,
     },
+
+    /* ─────────────  Relations  ───────────── */
     owner_id: {
       type: DataTypes.INTEGER,
-      allowNull: false
-    }
+      allowNull: false,
+    },
+
+    /* ─────────────  Trial flag  ───────────── */
+    trial: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
   },
   {
     tableName: "shop",
-    timestamps: true
-  }
-);
+    timestamps: true,
+  },
+)
 
-export default Shop;
+export default Shop

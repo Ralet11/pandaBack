@@ -1,19 +1,20 @@
-import { Router } from "express";
+// routes/shops.routes.js
+import { Router } from 'express';
 import {
   createShop,
   getShops,
   getShopById,
   updateShop,
   deleteShop
-} from "../controllers/shops.controller.js";
-import { verifyToken } from "../middleware/authJwt.js";
+} from '../controllers/shops.controller.js';
+import { verifyToken } from '../middleware/authJwt.js';
 
 const router = Router();
 
-router.post("/", verifyToken, createShop);
-router.get("/", getShops);
+router.post('/', verifyToken, createShop);
+router.get('/', getShops);
 router
-  .route("/:id")
+  .route('/:id')
   .get(getShopById)
   .put(verifyToken, updateShop)
   .delete(verifyToken, deleteShop);
